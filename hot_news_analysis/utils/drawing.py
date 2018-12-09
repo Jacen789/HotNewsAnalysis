@@ -1,13 +1,14 @@
 # -*- coding: utf-8 -*-
 
-import matplotlib.pyplot as plt
 import os
+import matplotlib.pyplot as plt
 
 plt.rcParams['font.sans-serif'] = ['SimHei']
 plt.rcParams['axes.unicode_minus'] = False
 
 file_dir_path = os.path.dirname(os.path.realpath(__file__))  # 当前文件所在目录路径
 images_path = os.path.join(os.path.dirname(file_dir_path), 'data', 'images')  # 图片存储的目录路径
+
 
 def draw_clustering_result(data_pca_tsne, label):
     """绘制聚类效果图"""

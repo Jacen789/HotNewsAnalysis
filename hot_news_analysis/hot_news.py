@@ -3,7 +3,8 @@
 import os
 import pandas as pd
 from datetime import datetime
-from utils import news_crawler
+from crawlers import news_crawler
+from crawlers import thread_crawler
 from utils import news_pandas
 from utils import preprocessing
 from utils import modeling
@@ -13,9 +14,9 @@ from utils import counter
 import threading
 
 # 获取项目路径
-project_path = os.path.dirname(os.path.realpath(__file__))
+current_folder_path = os.path.dirname(os.path.realpath(__file__))
 # 获取数据存放目录路径
-data_path = os.path.join(project_path, 'data')
+data_path = os.path.join(current_folder_path, 'data')
 fonts_path = os.path.join(data_path, 'fonts')
 images_path = os.path.join(data_path, 'images')
 texts_path = os.path.join(data_path, 'texts')
@@ -34,26 +35,29 @@ def my_crawler():
     # news_crawler.save_news(sina_news_df, os.path.join(news_path, 'sina_latest_news.csv'))
     # news_crawler.save_news(sohu_news_df, os.path.join(news_path, 'sohu_latest_news.csv'))
     # news_crawler.save_news(xinhuanet_news_df, os.path.join(news_path, 'xinhuanet_latest_news.csv'))
-    news_crawler.threaded_crawler(1000, 1000, 10)
+    save_file_path = os.path.join(news_path, 'news_df.csv')
+    thread_crawler.threaded_crawler(1000, 1000, 10, save_file_path=save_file_path)
 
 
 def load_data():
     """加载数据"""
-    sina_news_df = news_crawler.load_news(os.path.join(news_path, 'sample_sina_latest_news.csv'))
-    sohu_news_df = news_crawler.load_news(os.path.join(news_path, 'sample_sohu_latest_news.csv'))
-    xinhuanet_news_df = news_crawler.load_news(os.path.join(news_path, 'sample_xinhuanet_latest_news.csv'))
+    # sina_news_df = news_crawler.load_news(os.path.join(news_path, 'sample_sina_latest_news.csv'))
+    # sohu_news_df = news_crawler.load_news(os.path.join(news_path, 'sample_sohu_latest_news.csv'))
+    # xinhuanet_news_df = news_crawler.load_news(os.path.join(news_path, 'sample_xinhuanet_latest_news.csv'))
     # sina_news_df = news_crawler.load_news(os.path.join(news_path, 'sina_latest_news.csv'))
     # sohu_news_df = news_crawler.load_news(os.path.join(news_path, 'sohu_latest_news.csv'))
     # xinhuanet_news_df = news_crawler.load_news(os.path.join(news_path, 'xinhuanet_latest_news.csv'))
-    news_df = pd.concat([sina_news_df, sohu_news_df, xinhuanet_news_df], ignore_index=True)
+    # news_df = pd.concat([sina_news_df, sohu_news_df, xinhuanet_news_df], ignore_index=True)
+    save_file_path = os.path.join(news_path, 'news_df.csv')
+    news_df = news_pandas.load_news(save_file_path)
     return news_df
 
 
 def filter_data(news_df):
     """过滤数据"""
     df = preprocessing.data_filter(news_df)
-    # now_time = datetime.strftime(datetime.now(), '%Y-%m-%d %H:%M')
-    now_time = '2018-04-06 23:59'
+    now_time = datetime.strftime(datetime.now(), '%Y-%m-%d %H:%M')
+    # now_time = '2018-04-06 23:59'
     df = preprocessing.get_data(df, last_time=now_time, delta=5)
     return df
 
@@ -159,11 +163,14 @@ def get_wordcloud(df, rank_column, text_list_column):
     """
     df_non_outliers = modeling.get_non_outliers_data(df, label_column=rank_column)
     label_num = counter.get_num_of_value_no_repeat(df_non_outliers[rank_column].tolist())
+    wordcloud_folder_path = os.path.join(results_path, rank_column)
+    if not os.path.exists(wordcloud_folder_path):
+        os.mkdir(wordcloud_folder_path)
     for i in range(1, label_num + 1):
         df_ = df[df[rank_column] == i]
         list_ = counter.flat(df_[text_list_column].tolist())
-        modeling.list2wordcloud(list_, save_path=os.path.join(results_path, rank_column, '%d.png' % i),
-                                font_path=os.path.join(fonts_path, 'yw.ttf'))
+        modeling.list2wordcloud(list_, save_path=os.path.join(wordcloud_folder_path, '%d.png' % i),
+                                font_path=os.path.join(fonts_path, 'simhei.ttf'))
 
 
 def key_content(df, df_save=False):
@@ -186,6 +193,7 @@ def get_key_words():
     df_content = news_crawler.load_news(os.path.join(results_path, 'df_content_rank.csv'))
     df_title['title_cut'] = df_title['title_cut'].map(eval)
     df_content['content_cut'] = df_content['content_cut'].map(eval)
+    get_wordcloud(df_content, 'content_rank', 'content_cut')
     df_title_content = df_title.copy()
     df_title_content['content_cut'] = df_content['content_cut']
     df_title_content['content_rank'] = df_content['content_rank']

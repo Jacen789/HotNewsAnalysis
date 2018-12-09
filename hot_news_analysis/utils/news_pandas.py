@@ -7,7 +7,7 @@ import pickle
 
 def save_news(news_df, path):
     """保存新闻"""
-    news_df.to_csv(path, index=False, encoding='gb18030')
+    news_df.to_csv(path, index=False, encoding='utf-8')
 
 
 def replace_line_terminator(x):
@@ -21,7 +21,7 @@ def replace_line_terminator(x):
 
 def load_news(path):
     """加载新闻"""
-    news_df = pd.read_csv(path, encoding='gb18030')
+    news_df = pd.read_csv(path, encoding='utf-8')
     news_df = news_df.applymap(replace_line_terminator)
     return news_df
 

@@ -5,20 +5,14 @@ import json
 import re
 import lxml.html
 from lxml import etree
-from random import randint
+import random
 from datetime import datetime
 import pandas as pd
-
-# 测试所需模块
-import os
-import threading
-import multiprocessing
 
 LATEST_COLS = ['title', 'time', 'url']
 LATEST_COLS_C = ['title', 'time', 'url', 'content']
 
-sina_template_url = 'http://roll.news.sina.com.cn/interface/rollnews_ch_out_interface.php' \
-                    '?col=43&spec=&type=&ch=03&k=&offset_page=0&offset_num=0&num={}&asc=&page=1&r=0.{}'
+sina_template_url = 'https://feed.mix.sina.com.cn/api/roll/get?pageid=153&lid=2516&k=&num={}&page={}&r={}'
 sohu_template_url = 'http://v2.sohu.com/public-api/feed?scene=CHANNEL&sceneId=15&page=1&size={}'
 xinhuanet_template_url = 'http://qc.wa.news.cn/nodeart/list?nid=11147664&pgnum={}&cnt={}&tp=1&orderby=1'
 nets = ['sina', 'sohu', 'xinhuanet']
@@ -39,7 +33,7 @@ latest_news_functions = {
     'xinhuanet': 'get_xinhuanet_latest_news'
 }
 xpaths = {
-    'sina': '//*[@id="artibody"]/p',
+    'sina': '//*[@id="artibody" or @id="article"]//p',
     'sohu': '//*[@id="mp-editor"]/p',
     'xinhuanet': '//*[@id="p-detail"]/p'
 }
@@ -82,13 +76,18 @@ def latest_content(net, url):
     """
     content = ''
     try:
-        html = lxml.html.parse(url, parser=etree.HTMLParser(encoding='utf-8'))
+        request = urllib.request.Request(url, headers=headers)
+        opener = urllib.request.build_opener()
+        text = opener.open(request).read().decode('utf-8')
+        html = lxml.etree.HTML(text)
         res = html.xpath(xpaths[net])
         p_str_list = [etree.tostring(node).strip().decode('utf-8') for node in res]
         content = '\n'.join(p_str_list)
         html_content = lxml.html.fromstring(content)
         content = html_content.text_content()
-        content = re.sub(r'(\r*\n)+', '\n', content)
+        content = re.sub(r'\s*\n\s*', '\n', content)
+        content = re.sub(r'\s(\s)', r'\1', content)
+        content = content.strip()
     except Exception as e:
         print(e)
     return content
@@ -97,28 +96,33 @@ def latest_content(net, url):
 def get_sina_latest_news(template_url, top=80, show_content=False):
     """获取新浪即时财经新闻"""
     try:
-        url = template_url.format(top, randint(10 ** 15, (10 ** 16) - 1))
-        print(url)
-        request = urllib.request.Request(url, headers=headers)
-        data_str = urllib.request.urlopen(request, timeout=10).read()
-        data_str = data_str.decode('gbk')
-        data_str = data_str.split('=', 1)[1][:-1]
-        data_str = eval(data_str, type('Dummy', (dict,), dict(__getitem__=lambda s, n: n))())
-        data_str = json.dumps(data_str)
-        data_str = json.loads(data_str)
-        data_str = data_str['list']
-        data = []
-        for r in data_str:
-            rt = datetime.fromtimestamp(r['time'])
-            rt_str = datetime.strftime(rt, '%Y-%m-%d %H:%M')
-            row = [r['title'], rt_str, r['url']]
-            if show_content:
-                row.append(latest_content('sina', r['url']))
-            data.append(row)
-        df = pd.DataFrame(data, columns=LATEST_COLS_C if show_content else LATEST_COLS)
+        num_list = [50] * (top // 50)
+        last_page_num = top % 50
+        if last_page_num:
+            num_list += [last_page_num]
+
+        df_data = []
+        for page, num in enumerate(num_list, start=1):
+            r = random.random()
+            url = template_url.format(50, page, r)
+            print(url)
+            request = urllib.request.Request(url, headers=headers)
+            data_str = urllib.request.urlopen(request, timeout=10).read()
+            response_dict = json.loads(data_str)
+            data_list = response_dict['result']['data']
+
+            for data in data_list[:num]:
+                ctime = datetime.fromtimestamp(int(data['ctime']))
+                ctime = datetime.strftime(ctime, '%Y-%m-%d %H:%M')
+                url = data['url']
+                row = [data['title'], ctime, url]
+                if show_content:
+                    row.append(latest_content('sina', url))
+                df_data.append(row)
+        df = pd.DataFrame(df_data, columns=LATEST_COLS_C if show_content else LATEST_COLS)
         return df
     except Exception as e:
-        print(e)
+        print('sina:', e)
 
 
 def get_sohu_latest_news(template_url, top=80, show_content=False):
@@ -145,7 +149,7 @@ def get_sohu_latest_news(template_url, top=80, show_content=False):
         df = pd.DataFrame(data, columns=LATEST_COLS_C if show_content else LATEST_COLS)
         return df
     except Exception as e:
-        print(e)
+        print('sohu:', e)
 
 
 def get_xinhuanet_latest_news(template_url, top=80, show_content=False):
@@ -178,12 +182,12 @@ def get_xinhuanet_latest_news(template_url, top=80, show_content=False):
         df = pd.DataFrame(data, columns=LATEST_COLS_C if show_content else LATEST_COLS)
         return df
     except Exception as e:
-        print(e)
+        print('xinhuanet:', e)
 
 
 def save_news(news_df, path):
     """保存新闻"""
-    news_df.to_csv(path, index=False, encoding='gb18030')
+    news_df.to_csv(path, index=False, encoding='utf-8')
 
 
 def replace_line_terminator(x):
@@ -197,7 +201,7 @@ def replace_line_terminator(x):
 
 def load_news(path):
     """加载新闻"""
-    news_df = pd.read_csv(path, encoding='gb18030')
+    news_df = pd.read_csv(path, encoding='utf-8')
     news_df = news_df.applymap(replace_line_terminator)
     return news_df
 
@@ -238,43 +242,6 @@ def xinhuanet_crawler(top, path):
     save_news(xinhuanet_news_df, path)
 
 
-"""-------------------------测试代码-------------------------"""
-
-file_dir_path = os.path.dirname(os.path.realpath(__file__))  # 当前文件所在目录路径
-news_path = os.path.join(os.path.dirname(file_dir_path), 'data', 'news')  # 新闻存储的目录路径
-sina_latest_news_path = os.path.join(news_path, 'sina_latest_news.csv')
-sohu_latest_news_path = os.path.join(news_path, 'sohu_latest_news.csv')
-xinhuanet_latest_news_path = os.path.join(news_path, 'xinhuanet_latest_news.csv')
-
-
-def threaded_crawler(sina_top=10, sohu_top=10, xinhuanet_top=10):
-    """多线程爬虫"""
-    thread1 = threading.Thread(target=sina_crawler, args=(sina_top, sina_latest_news_path))
-    thread2 = threading.Thread(target=sohu_crawler, args=(sohu_top, sohu_latest_news_path))
-    thread3 = threading.Thread(target=xinhuanet_crawler, args=(xinhuanet_top, xinhuanet_latest_news_path))
-    thread1.start()
-    thread2.start()
-    thread3.start()
-    threads = [thread1, thread2, thread3]
-    for thread in threads:
-        thread.join()
-    print('爬取新闻完成！')
-
-
-def process_crawler(sina_top=10, sohu_top=10, xinhuanet_top=10):
-    """多进程爬虫"""
-    p1 = multiprocessing.Process(target=sina_crawler, args=(sina_top, sina_latest_news_path))
-    p2 = multiprocessing.Process(target=sohu_crawler, args=(sohu_top, sohu_latest_news_path))
-    p3 = multiprocessing.Process(target=xinhuanet_crawler, args=(xinhuanet_top, xinhuanet_latest_news_path))
-    p1.start()
-    p2.start()
-    p3.start()
-    processes = [p1, p2, p3]
-    for p in processes:
-        p.join()
-    print('爬取新闻完成！')
-
-
 if __name__ == '__main__':
-    threaded_crawler(10, 10, 10)
-    # process_crawler(10, 10, 10)
+    df = get_latest_news('xinhuanet', top=10, show_content=True)
+    print(df['content'])

@@ -19,7 +19,7 @@ def get_word_library(list1):
     :return: list，所有词去重之后的列表
     """
     list2 = flat(list1)
-    list3 = set(list2)
+    list3 = list(set(list2))
     return list3
 
 

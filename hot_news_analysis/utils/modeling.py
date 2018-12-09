@@ -7,7 +7,7 @@ from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
 from sklearn.cluster import DBSCAN, KMeans
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
-# from wordcloud import WordCloud
+from wordcloud import WordCloud
 from textrank4zh import TextRank4Sentence
 from gensim.models import word2vec
 
